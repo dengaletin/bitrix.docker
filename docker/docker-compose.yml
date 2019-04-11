@@ -1,0 +1,65 @@
+# Версия docker-compose
+version: '3'
+# Список наших сервисов (контейнеров)
+services:
+    nginx:
+      # используем последний стабильный образ nginx
+        image: nginx:latest
+        # маршрутизируем порты
+        ports:
+            - "80:80"
+            - "443:443"
+        # монтируем директории, слева директории на основной машине, справа - куда они монтируются в контейнере
+        volumes:
+            - ./hosts:/etc/nginx/conf.d
+            - ${SITE_PATH}:/var/www
+            - ./logs:/var/log/nginx
+        # nginx должен общаться с php контейнером
+        links:
+            - php
+            - memcached
+    memcached:
+        image: memcached
+        ports:
+        - "11211:11211"
+    php:
+        # у нас свой образ для PHP, указываем путь к нему и говорим что его надо собрать
+        build:
+            context: ./images/php
+            args:
+                SITE_PATH: ${SITE_PATH}
+        # этот образ будет общаться с mysql
+        links:
+            - mysql
+        # монтируем директорию с проектами
+        volumes:
+            - ${SITE_PATH}:/var/www
+        user: '1000:1000'
+    mysql:
+        build: 
+            context: ./images/mysql
+            args:
+                DB_PATH: ${DB_PATH}
+        ports:
+            - "3307:3307"
+        volumes:
+            - ${DB_PATH}:/var/lib/mysql
+        # задаем пароль для root пользователя
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+        user: '1000:mysql'
+    pma:
+      # используем последний стабильный образ phpmyadmin
+        image: phpmyadmin/phpmyadmin
+        restart: always
+        links:
+            - mysql:mysql
+        depends_on:
+            - mysql
+        ports:
+            - 8183:80
+        environment:
+            # прописываем название нашего MySQL хоста
+            PMA_HOST: mysql
+            MYSQL_USERNAME: root
+            MYSQL_ROOT_PASSWORD: root
